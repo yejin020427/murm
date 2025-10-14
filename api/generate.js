@@ -1,5 +1,5 @@
-// api/generate.js
-import OpenAI from "openai";
+// api/generate.js  (Vercel Edge Function)
+export const config = { runtime: "edge" };
 
 const map = {
   espresso:
@@ -14,27 +14,52 @@ const map = {
     "pink pilates princess, high-teen vibe, glossy candy highlights, dreamy soft focus, playful motion blur",
 };
 
-export default async function handler(req, res) {
+export default async function handler(req) {
   try {
-    const { menu } = req.query;
+    const { searchParams } = new URL(req.url);
+    const menu = searchParams.get("menu") || "espresso";
     const prompt = map[menu] || "soft noisy dreamy minimal gallery image";
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-    // gpt-image-1으로 1024 이미지를 base64로 생성
-    const result = await openai.images.generate({
-      model: "gpt-image-1",
-      prompt,
-      size: "1024x1024",
-      response_format: "b64_json",
+    const resp = await fetch("https://api.openai.com/v1/images/generations", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-image-1",
+        prompt,
+        size: "1024x1024",
+        response_format: "b64_json",
+      }),
     });
 
-    const b64 = result.data?.[0]?.b64_json;
-    if (!b64) return res.status(502).json({ error: "no_image" });
+    if (!resp.ok) {
+      const err = await resp.text();
+      return new Response(
+        JSON.stringify({ error: "openai_failed", detail: err }),
+        { status: 500, headers: { "content-type": "application/json" } }
+      );
+    }
+
+    const json = await resp.json();
+    const b64 = json?.data?.[0]?.b64_json;
+    if (!b64) {
+      return new Response(
+        JSON.stringify({ error: "no_image" }),
+        { status: 502, headers: { "content-type": "application/json" } }
+      );
+    }
 
     const dataUrl = `data:image/png;base64,${b64}`;
-    res.status(200).json({ url: dataUrl, prompt, menu });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "generation_failed" });
+    return new Response(
+      JSON.stringify({ url: dataUrl, menu, prompt }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+  } catch (e) {
+    return new Response(
+      JSON.stringify({ error: "generation_failed", detail: String(e) }),
+      { status: 500, headers: { "content-type": "application/json" } }
+    );
   }
 }
