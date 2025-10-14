@@ -1,17 +1,12 @@
-// api/generate.js  (Vercel Edge Function)
+// api/generate.js
 export const config = { runtime: "edge" };
 
 const map = {
-  espresso:
-    "espresso mood, messy girl rock chaos, grainy film, warm amber highlights, cinematic still, shallow depth of field",
-  americano:
-    "underground subway, minimal modern city, glass reflections, neon thread, moody blue, photographic realism",
-  matcha:
-    "green tea ritual, calm clarity, japanese garden minimalism, pale lime and mint, soft sunlight, fine grain",
-  cappuccino:
-    "vintage LP, fall season, cozy sepia foam, analog texture, warm film look, intimate still life",
-  strawberry:
-    "pink pilates princess, high-teen vibe, glossy candy highlights, dreamy soft focus, playful motion blur",
+  espresso: "espresso mood, messy girl rock chaos, warm amber film still",
+  americano: "minimal city subway, thread, neon moody blue light",
+  matcha: "green tea calm clarity, japanese garden sunlight",
+  cappuccino: "vintage LP, sepia cozy foam, warm tone",
+  strawberry: "pink pilates princess, highteen vibe, glossy candy light"
 };
 
 export default async function handler(req) {
@@ -29,41 +24,21 @@ export default async function handler(req) {
       body: JSON.stringify({
         model: "gpt-image-1",
         prompt,
-        size: "1024x1024",
-        // ❌ response_format 제거 (기본이 base64)
+        size: "1024x1024"
       }),
     });
 
-    if (!resp.ok) {
-      const errText = await resp.text();
-      return new Response(
-        JSON.stringify({ error: "openai_failed", detail: errText }),
-        { status: 500, headers: { "content-type": "application/json" } }
-      );
-    }
-
     const json = await resp.json();
-    const item = json?.data?.[0] || {};
-    // gpt-image-1은 기본이 base64. 혹시 url을 줄 수도 있으니 둘 다 대응.
-    const url = item.b64_json
-      ? `data:image/png;base64,${item.b64_json}`
-      : item.url;
+    const b64 = json?.data?.[0]?.b64_json;
+    const url = b64 ? `data:image/png;base64,${b64}` : json?.data?.[0]?.url;
 
-    if (!url) {
-      return new Response(
-        JSON.stringify({ error: "no_image" }),
-        { status: 502, headers: { "content-type": "application/json" } }
-      );
-    }
-
+    return new Response(JSON.stringify({ url, menu, prompt }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (err) {
     return new Response(
-      JSON.stringify({ url, menu, prompt }),
-      { status: 200, headers: { "content-type": "application/json" } }
-    );
-  } catch (e) {
-    return new Response(
-      JSON.stringify({ error: "generation_failed", detail: String(e) }),
-      { status: 500, headers: { "content-type": "application/json" } }
+      JSON.stringify({ error: String(err) }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
 }
