@@ -30,30 +30,34 @@ export default async function handler(req) {
         model: "gpt-image-1",
         prompt,
         size: "1024x1024",
-        response_format: "b64_json",
+        // ❌ response_format 제거 (기본이 base64)
       }),
     });
 
     if (!resp.ok) {
-      const err = await resp.text();
+      const errText = await resp.text();
       return new Response(
-        JSON.stringify({ error: "openai_failed", detail: err }),
+        JSON.stringify({ error: "openai_failed", detail: errText }),
         { status: 500, headers: { "content-type": "application/json" } }
       );
     }
 
     const json = await resp.json();
-    const b64 = json?.data?.[0]?.b64_json;
-    if (!b64) {
+    const item = json?.data?.[0] || {};
+    // gpt-image-1은 기본이 base64. 혹시 url을 줄 수도 있으니 둘 다 대응.
+    const url = item.b64_json
+      ? `data:image/png;base64,${item.b64_json}`
+      : item.url;
+
+    if (!url) {
       return new Response(
         JSON.stringify({ error: "no_image" }),
         { status: 502, headers: { "content-type": "application/json" } }
       );
     }
 
-    const dataUrl = `data:image/png;base64,${b64}`;
     return new Response(
-      JSON.stringify({ url: dataUrl, menu, prompt }),
+      JSON.stringify({ url, menu, prompt }),
       { status: 200, headers: { "content-type": "application/json" } }
     );
   } catch (e) {
